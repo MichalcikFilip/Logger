@@ -1,31 +1,36 @@
 ﻿using Michalcik.Logger.Formatters;
+using Michalcik.Logger.Units;
+using Michalcik.Logger.Units.Default;
 using Michalcik.Logger.Writers;
 using System;
 using System.Collections.Generic;
 
 namespace Michalcik.Logger
 {
-    public class BaseLogger
+    public class BaseLogger : ILogger
     {
-        public LogLevel MinLevel { get; set; } = LogLevel.Debug;
-        public List<ILogFormatter> Formatters { get; } = new List<ILogFormatter>();
+        private ILogUnitFactory unitFactory;
+        private List<ILogUnit> units = new List<ILogUnit>();
 
-        public void Message(LogLevel level, string message, object source)
+        public LogLevel MinLevel { get; set; }
+
+        public BaseLogger(LogLevel minLevel)
+            : this(minLevel, new LogUnitFactory())
+        { }
+
+        public BaseLogger(LogLevel minLevel, ILogUnitFactory unitFactory)
         {
-            DateTime time = DateTime.Now;
+            MinLevel = minLevel;
 
-            if (CanLogMessage(level, source))
-                foreach (ILogFormatter formatter in Formatters)
-                    Write(formatter.Format(level, time, message, source), formatter.Writers);
+            this.unitFactory = unitFactory ?? throw new ArgumentNullException(nameof(unitFactory));
         }
 
-        public void Exception(LogLevel level, Exception exception, object source)
+        public void AddConfiguration(ILogFormatter formatter, IEnumerable<ILogWriter> writers)
         {
-            DateTime time = DateTime.Now;
+            ILogUnit unit = unitFactory.Create(formatter, writers);
 
-            if (CanLogMessage(level, source))
-                foreach (ILogFormatter formatter in Formatters)
-                    Write(formatter.Format(level, time, formatter.ExceptionFormatter?.Format(exception), source), formatter.Writers);
+            if (unit != null)
+                units.Add(unit);
         }
 
         protected virtual bool CanLogMessage(LogLevel level, object source)
@@ -33,10 +38,22 @@ namespace Michalcik.Logger
             return level >= MinLevel;
         }
 
-        private void Write(string message, IEnumerable<ILogWriter> writers)
+        public void Message(LogLevel level, string message, object source)
         {
-            foreach (ILogWriter writer in writers)
-                writer.Write(message);
+            DateTime time = DateTime.Now;
+
+            if (CanLogMessage(level, source))
+                foreach (ILogUnit unit in units)
+                    unit.LogMessage(level, time, message, source);
+        }
+
+        public void Exception(LogLevel level, Exception exception, object source)
+        {
+            DateTime time = DateTime.Now;
+
+            if (CanLogMessage(level, source))
+                foreach (ILogUnit unit in units)
+                    unit.LogException(level, time, exception, source);
         }
 
         public void Debug(string message, object source)

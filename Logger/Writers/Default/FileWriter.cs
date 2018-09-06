@@ -5,10 +5,13 @@ namespace Michalcik.Logger.Writers.Default
 {
     public class FileWriter : ILogWriter
     {
-        public string Path { get; set; }
+        public string Path { get; }
 
         public FileWriter(string path)
         {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new ArgumentNullException(nameof(path));
+
             Path = path;
         }
 
